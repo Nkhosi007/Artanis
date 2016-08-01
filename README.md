@@ -5,7 +5,8 @@
 	_Author: Jerry Wong_
 	_Aug-2016_
 	
-	## Basic functions and classes:
+	Basic functions and classes:
+	----------------------------
 		### genVIX:
 			* compute an analog of VIX for a specific stock
 			* requires options historical data
