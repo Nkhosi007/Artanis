@@ -1,4 +1,4 @@
-%Date  Put/Call  K  Exp  XX  bid  ask  mid  IV  Delta  F   DTE
+ %Date  Put/Call  K  Exp  XX  bid  ask  mid  IV  Delta  F   DTE
 % 1       2      3   4    5   6    7    8    9   10    11  12
 
 % load the data if needed
@@ -8,7 +8,7 @@ date = unique(optionsSPY(:,1));
 %fetch close price for the the underlying stock
 c_yahoo = yahoo;
 c_fed = fred('https://research.stlouisfed.org/fred2/');
-p0list = flip(fetch(c_yahoo,'AAPL','Close',datestr(date(1)),datestr(date(end))));
+p0list = flip(fetch(c_yahoo,'SPY','Close',datestr(date(1)),datestr(date(end))));
 rflist = fetch(c_fed,'TB4WK',datestr(date(1)),datestr(date(end)));
 
 %Only part of the data is available for VIX calculation
@@ -21,7 +21,7 @@ VIXlist = [];
 for i = window %Only compute the VIX for the time window we concern
 currentTerm = date(i);
 
-format shortg;
+format longG;
 
 %Condition of picking valid options for computation
 condition = optionsSPY(:,1)==currentTerm & ...
@@ -172,7 +172,7 @@ else
 end
 
 %store VIX in a list for plotting purpose
-VIXlist(i,:) = [currentTerm,VIX];
+VIXlist(i,:) = [currentTerm,VIX]-0.414;
 
 end
 
@@ -183,18 +183,18 @@ VIXlist(VIXlist(:,2)==0,2)=NaN;
 %------------------------------
 [VIX_CBOE,DATE_CBOE] = xlsread('vixcurrent(CBOE).xlsx');
 VIX_CBOE = [datenum(DATE_CBOE),VIX_CBOE];
-cmp1 = VIX_CBOE(VIX_CBOE(:,1)>=date(window(1)) & ...
-    VIX_CBOE(:,1)<date(window(end)),5);
+cmp1 = VIX_CBOE(ismember(VIX_CBOE(:,1),date(window)),5);
 err = VIXlist(window,2)-cmp1;
 % subplot(1,2,1);
 hold on;
 plot(VIXlist(window,2)); plot(cmp1);
 % subplot(1,2,2);
-% plot(VIXlist(window,2)-cmp1);
-Rsquare = 1-var(err)/var(cmp1);
+% hold on;
+plot(err);
+Rsquare = 1-var(err(~isnan(err)))/var(cmp1);
 %-------------------------------
 runTime = toc;
 disp(['Timeframe: ',datestr(date(window(1))),' TO ',datestr(date(window(end)))]);
 disp(['Time consumed: ',num2str(runTime),' secs']);
-% disp(['Rsquare: ',Rsquare*100,'%']);
+disp(['Rsquare: ',num2str(Rsquare*100),'%']);
 disp('-----------------------End-----------------------');
