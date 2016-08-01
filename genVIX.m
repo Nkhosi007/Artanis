@@ -191,7 +191,8 @@ plot(VIXlist(window,2)); plot(cmp1);
 % subplot(1,2,2);
 % hold on;
 plot(err);
-Rsquare = 1-var(err(~isnan(err)))/var(cmp1);
+legend({'Computed VIX','True VIX','Error'});
+Rsquare = 1-var(err(~isnan(err)))/var(cmp1(~isnan(err)));
 %-------------------------------
 runTime = toc;
 disp(['Timeframe: ',datestr(date(window(1))),' TO ',datestr(date(window(end)))]);
