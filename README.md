@@ -18,6 +18,7 @@ _Aug-2016_
 * options: record of current position
 * order history: log of orders ever placed
 * activeOrders: output of the strategy
+
 #### methods
 * genVIX(): compute the genVIX for this stock
 * policy(): trading strategy, output a set of orders
