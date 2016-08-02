@@ -1,8 +1,10 @@
 % Date  Put/Call  K  Exp  XX  bid  ask  mid  IV  Delta  F   DTE
 % 1       2      3   4    5   6    7    8    9   10    11  12
 % format longG
+% Am I in issue 1?
 classdef portfolio < handle
     properties
+        master
         currentDay;
         oldMktInfo; %only for testing
         mktInfo;
