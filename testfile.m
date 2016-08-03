@@ -25,4 +25,4 @@ myPfl.getMktInfo(newMktInfo);
 myPfl.markToMarket();
 myPfl.settleExpiredOptions();
 % myPfl.excute();
-disp(myPfl.cash);
+myPfl.computeVIX();

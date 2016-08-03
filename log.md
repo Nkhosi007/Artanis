@@ -3,7 +3,7 @@
 ### issue1
 
 Can't compute the status if net position is not zeros
-Expired-options-ettling orders should be derived from net position instead of _ordersLog_
+Expired-options-settling orders should be derived from net position instead of _ordersLog_
 
 ### issue1 - fix1
 
@@ -15,3 +15,9 @@ Expired-options-ettling orders should be derived from net position instead of _o
 4. _settleExpiredOptions_ will derive _expiredOrders_ from _netPosition_
 5. change the name of _getStatus_ to _excute_
 6. _excute_ updates the _netPosition_ by iterating through the orders of the _currentDay_
+
+### issue1 - fix2
+
+08/02/2016
+
+1. 
