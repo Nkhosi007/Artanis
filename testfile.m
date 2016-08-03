@@ -15,7 +15,7 @@ day2 = 736267;
 oldMktInfo = optionsSPY(optionsSPY(:,4)==736267&optionsSPY(:,1)==736266&optionsSPY(:,3)==210,:);
 newMktInfo = optionsSPY(optionsSPY(:,1)==day2,:);
 myPfl = portfolio();
-myPfl.setOrderType('MD');
+myPfl.setOrderType('MK');
 % myPfl.oldMktInfo = oldMktInfo;
 myPfl.getMktInfo(oldMktInfo);
 myPfl.policy();

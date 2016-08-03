@@ -2,13 +2,13 @@
 % 1       2      3   4    5   6    7    8    9   10    11  12
 
 % load the data if needed
-load('optionsSPY.mat'); 
-date = unique(optionsSPY(:,1));
+load('optionsAAPL.mat'); 
+date = unique(optionsAAPL(:,1));
 
 %fetch close price for the the underlying stock
 c_yahoo = yahoo;
 c_fed = fred('https://research.stlouisfed.org/fred2/');
-p0list = flip(fetch(c_yahoo,'SPY','Close',datestr(date(1)),datestr(date(end))));
+p0list = flip(fetch(c_yahoo,'AAPL','Close',datestr(date(1)),datestr(date(end))));
 rflist = fetch(c_fed,'TB4WK',datestr(date(1)),datestr(date(end)));
 
 %Only part of the data is available for VIX calculation
@@ -24,10 +24,10 @@ currentTerm = date(i);
 format longG;
 
 %Condition of picking valid options for computation
-condition = optionsSPY(:,1)==currentTerm & ...
-    optionsSPY(:,12)>23 & optionsSPY(:,12)<37;
+condition = optionsAAPL(:,1)==currentTerm & ...
+    optionsAAPL(:,12)>23 & optionsAAPL(:,12)<37;
 
-data = optionsSPY(condition,:);
+data = optionsAAPL(condition,:);
 
 if size(data,1)<1
     continue
@@ -164,16 +164,18 @@ N365 = 525600;
 
 
 if nearTermExpiration==nextTermExpiration
+    
     %if we have only one valid option(23<DTE<37), we just use that one
-    VIX = 100*sqrt((T1*sigmaSquare1)*N365/N30);
+    VIX = 100*sqrt((T1*abs(sigmaSquare1))*N365/N30);
 else
     %if we have two valid options(23<DTE<37), we average them
-    VIX = 100*sqrt((T1*sigmaSquare1*(NT2-N30)/(NT2-NT1)+T2*sigmaSquare2*(N30-NT1)/(NT2-NT1))*N365/N30);
+    VIX = 100*sqrt((T1*abs(sigmaSquare1)*(NT2-N30)/(NT2-NT1)+T2*abs(sigmaSquare2)*(N30-NT1)/(NT2-NT1))*N365/N30);
 end
 
+% disp(currentTerm);
+% disp(VIX);
 %store VIX in a list for plotting purpose
-VIXlist(i,:) = [currentTerm,VIX]-0.414;
-
+VIXlist(i,:) = [currentTerm,VIX];
 end
 
 VIXlist(VIXlist(:,2)==0,2)=NaN;
@@ -181,21 +183,21 @@ VIXlist(VIXlist(:,2)==0,2)=NaN;
 % If you want to compare the result with the official data
 % run the code below
 %------------------------------
-[VIX_CBOE,DATE_CBOE] = xlsread('vixcurrent(CBOE).xlsx');
-VIX_CBOE = [datenum(DATE_CBOE),VIX_CBOE];
-cmp1 = VIX_CBOE(ismember(VIX_CBOE(:,1),date(window)),5);
-err = VIXlist(window,2)-cmp1;
-% subplot(1,2,1);
-hold on;
-plot(VIXlist(window,2)); plot(cmp1);
-% subplot(1,2,2);
+% [VIX_CBOE,DATE_CBOE] = xlsread('vixcurrent(CBOE).xlsx');
+% VIX_CBOE = [datenum(DATE_CBOE),VIX_CBOE];
+% cmp1 = VIX_CBOE(ismember(VIX_CBOE(:,1),date(window)),5);
+% err = VIXlist(window,2)-cmp1;
+% % subplot(1,2,1);
 % hold on;
-plot(err);
-legend({'Computed VIX','True VIX','Error'});
-Rsquare = 1-var(err(~isnan(err)))/var(cmp1(~isnan(err)));
+% plot(VIXlist(window,2)); plot(cmp1);
+% % subplot(1,2,2);
+% % hold on;
+% plot(err);
+% legend({'Computed VIX','True VIX','Error'});
+% Rsquare = 1-var(err(~isnan(err)))/var(cmp1(~isnan(err)));
 %-------------------------------
 runTime = toc;
 disp(['Timeframe: ',datestr(date(window(1))),' TO ',datestr(date(window(end)))]);
 disp(['Time consumed: ',num2str(runTime),' secs']);
-disp(['Rsquare: ',num2str(Rsquare*100),'%']);
+% disp(['Rsquare: ',num2str(Rsquare*100),'%']);
 disp('-----------------------End-----------------------');

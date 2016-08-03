@@ -40,7 +40,7 @@ classdef portfolio < handle
             end
         end
         
-        function VIX = genVIX(mktInfo)
+        function computeVIX(self)
             
         end
         
@@ -155,36 +155,7 @@ classdef portfolio < handle
  % Date  Put/Call  K    Exp   XX   bid   ask   mid   IV    Delta   F   DTE  Long Short limitOrder mktOrder midOrder GrossFlow Fee NetFlow   /end
 % 1       2      3      4     5    6     7     8     9    10     11    12   13   14       15        16       17        18     19   20      /end    
        
-        function getStatus(self)
-            
-            pointerList = unique(self.excutedOrders(:,[2,3,4]),'rows');
-            
-            for j = 1:size(pointerList,1)
-                pointer = pointerList(j,:);
-                specificInfo = self.excutedOrders(self.excutedOrders(:,2)==pointer(1)&...
-                    self.excutedOrders(:,3)==pointer(2)&...
-                    self.excutedOrders(:,4)==pointer(3),:);
-                
-                % Work Zone
-%                 sum(specificInfo(:,[13,14]))   specificInfo(:,6:11)
-%                 
-%                 specificSum = [pointer,
-%                 self.netPosition = cat(1,self.netPosition,specificOptionsInfo);
-                
-            end
-            self.status = sum(self.excutedOrders(:,[18,19,20]));
-            self.grossSum = self.status(1);
-            self.feeSum = self.status(2);
-            self.netSum = self.status(3);
-            
-            disp(['Gross Profit: ',num2str(self.grossSum)]);
-            disp(['Net Profit: ',num2str(self.netSum)]);
-            disp(['Fee: ',num2str(self.feeSum)]);
-        end
-        
-        function history = record()
-        
-        end
+
     end
 end
     
