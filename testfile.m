@@ -1,4 +1,6 @@
 % test file
+dbstop if error;
+format longG;
 
 % dynamic plot
 % figure; hold on;
@@ -7,22 +9,27 @@
 % drawnow;
 % end
 
-
 % load('optionsSPY.mat'); 
-dbstop if error;
 day1 = 736266;
 day2 = 736267;
-oldMktInfo = optionsSPY(optionsSPY(:,4)==736267&optionsSPY(:,1)==736266&optionsSPY(:,3)==210,:);
+oldMktInfo = optionsSPY(optionsSPY(:,1)==day1,:);
 newMktInfo = optionsSPY(optionsSPY(:,1)==day2,:);
+
+
+
+day1 = 736266;
+day2 = 736267;
+
 myPfl = portfolio();
 myPfl.setOrderType('MK');
 % myPfl.oldMktInfo = oldMktInfo;
 myPfl.getMktInfo(oldMktInfo);
-myPfl.policy();
-myPfl.excute();
-myPfl.markToMarket();
-myPfl.getMktInfo(newMktInfo);
-myPfl.markToMarket();
-myPfl.settleExpiredOptions();
-% myPfl.excute();
 myPfl.computeVIX();
+myPfl.policy();
+% myPfl.excute();
+% myPfl.markToMarket();
+% myPfl.getMktInfo(newMktInfo);
+% myPfl.markToMarket();
+% myPfl.settleExpiredOptions();
+% % myPfl.excute();
+% myPfl.computeVIX();
