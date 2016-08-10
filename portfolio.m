@@ -7,9 +7,13 @@ classdef portfolio < handle
         oldMktInfo; %only for testing
         mktInfo;
         symbol = 'SPY';
-        p0 = 210.389999;
+        fetchMode = 'Offline';
+        p0;
+        p0List;
         rf;
-        VIX = 22.7967654004844;
+        rfList;
+        orderLimit=20;
+        VIX;
         VIXlog = [];
         VIXFlag = 1;
         signalCondition
@@ -25,15 +29,22 @@ classdef portfolio < handle
         activeOrders = [];
         expiredOrders = [];
         fixFee = 0;
-        feeRate = 1/1000;
+        feeRate = 0;
         grossSum;
         feeSum;
         netSum;
+        pctHighFilter = 50;
+        pctLowFilter = 0;
         c_yahoo = yahoo;
         c_fed = fred('https://research.stlouisfed.org/fred2/');
     end
     
     methods
+        
+        function reset(self)
+            self.cash = 0;
+            self.netPosition = zeros(0,10);
+        end
         
         function setOrderType(self,orderTypeStr)
             if strcmpi(orderTypeStr,'LimitOrder') || strcmpi(orderTypeStr,'LM')
@@ -43,7 +54,7 @@ classdef portfolio < handle
             elseif strcmpi(orderTypeStr,'MiddleOrder') || strcmpi(orderTypeStr,'MD')
                 self.orderType = [0,0,1];
             else
-                error('Input valid order type: LimitOrder or LM, MarketOrder or MK, MiddleOrder or MD');
+                error('Input valid order type: LimitOrder or LM, MarketOrder o  r MK, MiddleOrder or MD');
             end
         end
         
@@ -64,8 +75,14 @@ classdef portfolio < handle
             
 
                 %Close price for the underlying asset in current iteration
-                self.p0 = fetch(self.c_yahoo,self.symbol,'Close',datestr(currentTerm));
-                self.p0 = self.p0(:,2);
+                if strcmpi(self.fetchMode,'Online')
+                    self.p0 = fetch(self.c_yahoo,self.symbol,'Close',datestr(currentTerm));
+                    self.p0 = self.p0(:,2);
+                elseif strcmpi(self.fetchMode,'Offline')
+                    self.p0 = self.p0List(self.p0List(:,1)==self.currentDay,2);
+                else
+                    error('fetchMode: "Online" OR "Offline');
+                end
 
 
                 %Expiration of near term and next term
@@ -144,9 +161,15 @@ classdef portfolio < handle
                 end
 
                 %Risk free rate
-
-                self.rf = fetch(self.c_fed,'TB4WK',datestr(currentTerm-30),datestr(currentTerm));
-                self.rf = self.rf.Data(end,2);
+                if strcmpi(self.fetchMode,'Online')
+                    self.rf = fetch(self.c_fed,'TB4WK',datestr(currentTerm-30),datestr(currentTerm));
+                    self.rf = self.rf.Data(end,2);
+                elseif strcmpi(self.fetchMode,'Offline')
+                    closestFriday = max(self.rfList(self.rfList(:,1)<=self.currentDay,1));
+                    self.rf = self.rfList(self.rfList(:,1)==closestFriday,2);
+                else
+                    error('fetchMode: "Online" OR "Offline');
+                end
 
     %             closestFriday1 = max(rflist.Data(rflist.Data(:,1)<nearTermExpiration,1));
     %             closestFriday2 = max(rflist.Data(rflist.Data(:,1)<nextTermExpiration,1));
@@ -221,10 +244,13 @@ classdef portfolio < handle
                 pointer = self.netPosition(i,[1,2,3]);
                 head = ismember(self.mktInfo(:,[2,3,4]),pointer,'rows');
                 
-                excutePrices = [self.mktInfo(head,[6,7]);self.mktInfo(head,[7,6]);self.mktInfo(head,[8,8])];
-                longshort = sufficientStat(-self.netPosition(i,4));
-                ordersTypeVec = self.orderType;
-                self.netPosition(i,10) = -longshort*excutePrices'*ordersTypeVec';
+                try
+                    excutePrices = [self.mktInfo(head,[6,7]);self.mktInfo(head,[7,6]);self.mktInfo(head,[8,8])];
+                    longshort = sufficientStat(-self.netPosition(i,4));
+                    ordersTypeVec = self.orderType;
+                    self.netPosition(i,10) = -longshort*excutePrices'*ordersTypeVec';
+                catch
+                end
             end
             
             self.portfolioMarketValue = sum(self.netPosition(:,10));
@@ -233,33 +259,51 @@ classdef portfolio < handle
             
         function policy(self)
             
-            disp(self.VIX);
+            % initiate activeOrders
+            self.activeOrders = zeros(0,20);
+
             
             if self.currentDay~= self.VIXlog(end,1)
                 self.computeVIX();
             end
             
+            
+            %                1      2   3      4      5     6      7     8    9
+            %netPosition: Put/Call  K  Exp  position  IV  Delta  Gross  Fee  Net
             %policy starts here
+            
+            % search the most recent expiration day between 45-60
             targetExp = min(self.mktInfo(self.mktInfo(:,12)>45 & self.mktInfo(:,12)<60,4));
-            self.signalCondition = size(self.VIXlog(~isnan(self.VIXlog(:,2)),2),1)>61 &&...
-                size(targetExp,1)>0 &&...
-                size(self.netPosition,1)==0;
             
-            disp(self.signalCondition);
+            % requirements for policy (data sufficiency requirement)
+            self.signalCondition = size(self.VIXlog(~isnan(self.VIXlog(:,2)),2),1)>61 &&... %more than 60 historical VIXes in record
+                size(targetExp,1)>0 &&...at least one option expires between 45-60 days
+                sum(abs(self.netPosition(:,4)))<self.orderLimit;% &&...% less than 20 options in the basket
+                %~ismember(targetExp,self.netPosition(:,3));% two IC sets must expire at different dates(15 days apart at least)
             
+%             disp(self.signalCondition);
+            
+            % if data is sufficient, check VIX rank
             if self.signalCondition == 1
                 validVIX = self.VIXlog(~isnan(self.VIXlog(:,2)),:);
-                pct = prctile(validVIX(end-61:end-1,2),50);
-                disp(pct);
+                pctUp = prctile(validVIX(end-61:end-1,2),self.pctHighFilter);
+                pctDwn = prctile(validVIX(end-61:end-1,2),self.pctLowFilter);
+%                 disp(pct);
                 
-                if self.VIX>=pct
-                    disp('YEAH-------------');
+                %check VIX rank
+                % (policy is computationally expensive, do it only when needed)
+                if self.VIX>=pctUp || self.VIX<=pctDwn
+%                     disp('YEAH-------------');
                     
-                    %klist
+                    % extract available strike price list
                     klist = self.mktInfo(:,3);
+                    %short call
                     ka = min(klist(klist>self.p0));
+                    %short put
                     kb = max(klist(klist<self.p0));
+                    %long call
                     kc = ka+2;
+                    %long put
                     kd = kb-2;
                     
                     pointerList = [2,kd,targetExp;...
@@ -267,49 +311,71 @@ classdef portfolio < handle
                         1,ka,targetExp;...
                         1,kc,targetExp];
                     
-                    ironCondor = self.mktInfo(ismember(self.mktInfo(:,[2,3,4]),pointerList,'rows'),:);
+                    ironCondor = [self.mktInfo(ismember(self.mktInfo(:,[2,3,4]),pointerList(1,:),'rows'),:);%kd long put
+                        self.mktInfo(ismember(self.mktInfo(:,[2,3,4]),pointerList(2,:),'rows'),:);%kb short put
+                        self.mktInfo(ismember(self.mktInfo(:,[2,3,4]),pointerList(3,:),'rows'),:);%ka short call
+                        self.mktInfo(ismember(self.mktInfo(:,[2,3,4]),pointerList(4,:),'rows'),:)];%kc long call
                     
                     
-                    disp(size(ironCondor));
+%                     disp(size(ironCondor));
                     
-                    longShortANDorderType = cat(2,...
-                        [1,0;...
-                        0,-1;...
-                        0,-1;...
-                        1,0],...
-                        repmat(self.orderType,4,1));
-                    
-                    self.activeOrders = [ironCondor,longShortANDorderType];
-                    
-                    for i  = 1:size(self.activeOrders,1)
-                    excutePrices = [self.activeOrders(i,[6,7]);self.activeOrders(i,[7,6]);self.activeOrders(i,[8,8])];
-                    longshort = self.activeOrders(i,[13,14]);
-                    ordersTypeVec = self.activeOrders(i,[15,16,17]);
-                    gross = -longshort*excutePrices'*ordersTypeVec';
-                    fee = abs(gross)*self.feeRate+self.fixFee;
-                    net = gross - fee;
-                    self.activeOrders(i,18:20) = [gross,fee,net];
+                    if self.VIX > pctUp % high VIX -> Iron Condor
+                        longShortANDorderType = cat(2,...
+                            [1,0;...
+                            0,-1;...
+                            0,-1;...
+                            1,0],...
+                            repmat(self.orderType,4,1));
+                    elseif self.VIX < pctDwn % low VIX -> reversed Iron Condor
+                        longShortANDorderType = cat(2,...
+                            [0,-1;...
+                            1,0;...
+                            1,0;...
+                            0,-1],...
+                            repmat(self.orderType,4,1));
+                    else
+                        % do nothing
                     end
+                    
+                    if size(ironCondor,1) == 4 % sometimes IC is not available
+                        self.activeOrders = [ironCondor,longShortANDorderType];
+
+                        % compute gross/fee/net cashflow impact of the orders
+                        for i  = 1:size(self.activeOrders,1)
+                        excutePrices = [self.activeOrders(i,[6,7]);self.activeOrders(i,[7,6]);self.activeOrders(i,[8,8])];
+                        longshort = self.activeOrders(i,[13,14]);
+                        ordersTypeVec = self.activeOrders(i,[15,16,17]);
+                        gross = -longshort*excutePrices'*ordersTypeVec';
+                        fee = abs(gross)*self.feeRate+self.fixFee;
+                        net = gross - fee;
+                        self.activeOrders(i,18:20) = [gross,fee,net];
+                        end
+                        
+                    end
+                    
                 else
                     %do nothing
                 end
                 
             end
             
-            
+            % generate orders and store them in pendingOrders
+            % function excute() will handle from here
             self.pendingOrders = cat(1,self.pendingOrders,self.activeOrders);
         end
         
         function settleExpiredOptions(self)
             %excute the expired options
-            expiredPosition = self.netPosition(self.netPosition(:,3)==self.currentDay,:);
+            expiredPosition = self.netPosition(self.netPosition(:,3)<=self.currentDay+1,:);
             self.expiredOrders = [];
             
             for i = 1:size(expiredPosition,1)
-                
                 availableOrder = self.mktInfo(ismember(self.mktInfo(:,2:4),expiredPosition(i,1:3),'rows'),:);
-                
-                self.expiredOrders = cat(1,self.expiredOrders,[availableOrder,sufficientStat(-expiredPosition(i,4)),self.orderType, zeros(1,3)]);    
+                if size(availableOrder,1)==0
+                    continue;
+                else
+                    self.expiredOrders = cat(1,self.expiredOrders,[availableOrder,sufficientStat(-expiredPosition(i,4)),self.orderType, zeros(1,3)]);
+                end
             end
             
 %             self.expiredOrders = self.mktInfo(ismember(self.mktInfo(:,2:4),expiredPosition(:,1:3),'rows'),:);
@@ -369,8 +435,8 @@ classdef portfolio < handle
             self.activeOrders = zeros(0,20);
             self.expiredOrders = zeros(0,20);
             self.netPosition = self.netPosition(self.netPosition(:,4)~=0,:);
-            self.markToMarket();
-            self.netWorth = self.cash + self.portfolioMarketValue;
+%             self.markToMarket();
+%             self.netWorth = self.cash + self.portfolioMarketValue;
             end
         end
 
