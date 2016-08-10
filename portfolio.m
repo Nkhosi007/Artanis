@@ -257,7 +257,17 @@ classdef portfolio < handle
             self.netWorth = self.cash + self.portfolioMarketValue;
         end
             
-        function policy(self)
+        function policy(self,hfilter,lfilter)
+            
+            if nargin < 2
+                lfilter = 0;
+                if nargin < 1
+                    hfilter = 50;
+                end
+            end
+            
+            self.pctHighFilter = hfilter;
+            self.pctLowFilter = lfilter;
             
             % initiate activeOrders
             self.activeOrders = zeros(0,20);
