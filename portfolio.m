@@ -51,7 +51,7 @@ classdef portfolio < handle
                 self.orderType = [1,0,0];
             elseif strcmpi(orderTypeStr,'MarketOrder') || strcmpi(orderTypeStr,'MK')
                 self.orderType = [0,1,0];
-            elseif strcmpi(orderTypeStr,'MiddleOrder') || strcmpi(orderTypeStr,'MD')
+            elseif strcmpi(orderTypeStr,'MiddlePrice') || strcmpi(orderTypeStr,'MD')
                 self.orderType = [0,0,1];
             else
                 error('Input valid order type: LimitOrder or LM, MarketOrder o  r MK, MiddleOrder or MD');

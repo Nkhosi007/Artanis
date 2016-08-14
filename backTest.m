@@ -2,11 +2,21 @@
 %======================Uncomment this part only at first run=============
 
 % load('optionsSPY.mat'); 
-% date = unique(optionsSPY(:,4));
-% c_yahoo = yahoo;
-% c_fed = fred('https://research.stlouisfed.org/fred2/');
-% p0List = flip(fetch(c_yahoo,'SPY','Close',datestr(date(1)),datestr(date(end))));
-% rfList = fetch(c_fed,'TB4WK',datestr(date(1)),datestr(date(end)));
+% date = unique(optionsSPY(:,1));
+% 
+% try
+%   c_yahoo = yahoo;
+%   p0List = flip(fetch(c_yahoo,'SPY','Close',datestr(date(1)),datestr(date(end))));
+% catch
+%   load('p0List_SPY.mat');
+% end
+% 
+% try
+%   c_fed = fred('https://research.stlouisfed.org/fred2/');
+%   rfList = fetch(c_fed,'TB4WK',datestr(date(1)),datestr(date(end)));
+% catch
+%   load('rfList_SPY.mat');
+% end
 %==================================END===================================
 
 dbstop if error;
@@ -33,7 +43,7 @@ pfl = portfolio();
 % Backtest mode: 
 % 'Offline': historical data is loaded from local memory
 % 'Online': historical data is fetch from servers in every loop. It helps
-% to assure no future data is used but significantly increase run time.
+% to assure no future data is used but significantly increases run time.
 pfl.fetchMode = 'Offline'; 
 
 % If using offline backtest mode, assign the local data set
@@ -41,7 +51,7 @@ pfl.p0List = p0List; % underlying asset prices
 pfl.rfList = rfList.Data; % riskfree rate
 
 % Set default order type in order excutions and mark-to-market evaluation
-pfl.setOrderType('MD');
+pfl.setOrderType('MiddlePrice');
 
 % Maximum buying power in terms of numbers of options
 % 40 means 10 sets of IronCondor at most
@@ -55,6 +65,7 @@ pfl.orderLimit = 40;
     
     % If pctHighFilter = 25, pctLowFilter = 25, that means when VIX is ranked
     % lower than 25, short a iron condor.
+    
     
 pfl.pctHighFilter = 50;
 pfl.pctLowFilter = 0;

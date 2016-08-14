@@ -2,14 +2,14 @@
 % 1       2      3   4    5   6    7    8    9   10    11  12
 
 % load the data if needed
-load('optionsAAPL.mat'); 
-date = unique(optionsAAPL(:,1));
+% load('optionsSPY.mat'); 
+% date = unique(optionsSPY(:,1));
 
 %fetch close price for the the underlying stock
-c_yahoo = yahoo;
-c_fed = fred('https://research.stlouisfed.org/fred2/');
-p0list = flip(fetch(c_yahoo,'AAPL','Close',datestr(date(1)),datestr(date(end))));
-rflist = fetch(c_fed,'TB4WK',datestr(date(1)),datestr(date(end)));
+% c_yahoo = yahoo;
+% c_fed = fred('https://research.stlouisfed.org/fred2/');
+% p0List = flip(fetch(c_yahoo,'SPY','Close',datestr(date(1)),datestr(date(end))));
+% rfList = fetch(c_fed,'TB4WK',datestr(date(1)),datestr(date(end)));
 
 %Only part of the data is available for VIX calculation
 window = 1:size(date,1);
@@ -24,17 +24,17 @@ currentTerm = date(i);
 format longG;
 
 %Condition of picking valid options for computation
-condition = optionsAAPL(:,1)==currentTerm & ...
-    optionsAAPL(:,12)>23 & optionsAAPL(:,12)<37;
+condition = optionsSPY(:,1)==currentTerm & ...
+    optionsSPY(:,12)>23 & optionsSPY(:,12)<37;
 
-data = optionsAAPL(condition,:);
+data = optionsSPY(condition,:);
 
 if size(data,1)<1
     continue
 end
 
 %Close price for the underlying asset in current iteration
-p0 = p0list(i,2);
+p0 = p0List(i,2);
 
 %date(13)
 
@@ -116,10 +116,10 @@ end
 
 %Risk free rate
 
-closestFriday1 = max(rflist.Data(rflist.Data(:,1)<nearTermExpiration,1));
-closestFriday2 = max(rflist.Data(rflist.Data(:,1)<nextTermExpiration,1));
-rf1 = rflist.Data(rflist.Data(:,1)==closestFriday1,2);%1.1625/100;%log(f1/p0)/T1;%log((f1-kf1)/dp1)/T1;
-rf2 = rflist.Data(rflist.Data(:,1)==closestFriday2,2);%1.1625/100;%log(f2/p0)/T2;%log((f2-kf2)/dp2)/T2;
+closestFriday1 = max(rfList.Data(rfList.Data(:,1)<nearTermExpiration,1));
+closestFriday2 = max(rfList.Data(rfList.Data(:,1)<nextTermExpiration,1));
+rf1 = rfList.Data(rfList.Data(:,1)==closestFriday1,2);%1.1625/100;%log(f1/p0)/T1;%log((f1-kf1)/dp1)/T1;
+rf2 = rfList.Data(rfList.Data(:,1)==closestFriday2,2);%1.1625/100;%log(f2/p0)/T2;%log((f2-kf2)/dp2)/T2;
 
 %table1 and table2 are the tables on page 8 of VIX white paper
 %midPrice here means the average of the call/put price
