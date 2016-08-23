@@ -1,22 +1,26 @@
 
 %======================Uncomment this part only at first run=============
+format longg;
+try
+date = unique(optionsSPY(:,1));
+catch
+load('optionsSPY.mat');
+date = unique(optionsSPY(:,1));
+end
 
-% load('optionsSPY.mat'); 
-% date = unique(optionsSPY(:,1));
-% 
-% try
-%   c_yahoo = yahoo;
-%   p0List = flip(fetch(c_yahoo,'SPY','Close',datestr(date(1)),datestr(date(end))));
-% catch
-%   load('p0List_SPY.mat');
-% end
-% 
-% try
-%   c_fed = fred('https://research.stlouisfed.org/fred2/');
-%   rfList = fetch(c_fed,'TB4WK',datestr(date(1)),datestr(date(end)));
-% catch
-%   load('rfList_SPY.mat');
-% end
+try
+  load('p0List_SPY.mat');
+catch
+  c_yahoo = yahoo;
+  p0List = flip(fetch(c_yahoo,'SPY','Close',datestr(date(1)),datestr(date(end))));
+end
+
+try
+  load('rfList_SPY.mat');
+catch
+  c_fed = fred('https://research.stlouisfed.org/fred2/');
+  rfList = fetch(c_fed,'TB4WK',datestr(date(1)),datestr(date(end)));
+end
 %==================================END===================================
 
 dbstop if error;
@@ -35,9 +39,10 @@ dbstop if error;
 
 % back test from the 301th day till the end of historical data
 % (data before 301th day is massy)
-window = 301:size(date,1);
+st = 300;
+window = st:size(date,1);
 
- % initiate an instance
+% initiate an instance
 pfl = portfolio();
 
 % Backtest mode: 
@@ -45,10 +50,11 @@ pfl = portfolio();
 % 'Online': historical data is fetch from servers in every loop. It helps
 % to assure no future data is used but significantly increases run time.
 pfl.fetchMode = 'Offline'; 
+pfl.setFetchMode('offline',p0List,rfList.Data);
 
 % If using offline backtest mode, assign the local data set
-pfl.p0List = p0List; % underlying asset prices
-pfl.rfList = rfList.Data; % riskfree rate
+%pfl.p0List = p0List; % underlying asset prices
+%pfl.rfList = rfList.Data; % riskfree rate
 
 % Set default order type in order excutions and mark-to-market evaluation
 pfl.setOrderType('MiddlePrice');
@@ -71,12 +77,24 @@ pfl.pctHighFilter = 50;
 pfl.pctLowFilter = 0;
 netWorthRec = zeros(1,window(end));
 
-%grid search
+
+%grid search 
 comparedPar = {};
-comparedRec = [];
+comparedNet = [];
 comparedMDD = [];
-hfilterList = [0,10,25,50,];
-lfilterList = [50,25,10,0,];
+db_VIXFlag = zeros(1,window(end));
+db_policyFlag = zeros(1,window(end));
+db_MTMFlag = zeros(1,window(end));
+db_VIX = zeros(1,window(end));
+db_premiumFlag = zeros(1,window(end));
+db_pctUp = zeros(1,window(end));
+db_pctDwn = zeros(1,window(end));
+db_price = zeros(1,window(end));
+% cmp_VIXFlag = [];
+% cmp_policyFlag = [];
+% cmp_MTMFlag = [];
+hfilterList = [25,];
+lfilterList = [0,];
 for hfilter = hfilterList
     for lfilter = lfilterList
         if hfilter == 0 && lfilter == 0
@@ -112,13 +130,28 @@ for i = window
     
     % Store the net worth of total asset in a vector
     netWorthRec(i) = pfl.netWorth;
+    db_VIXFlag(i) = pfl.VIXFlag;
+    db_policyFlag(i) = pfl.policyFlag;
+    db_MTMFlag(i) = pfl.MTMFlag;
+    db_VIX(i) = pfl.VIX;
+    db_premiumFlag(i) = pfl.premiumFlag;
+    db_pctUp(i) = pfl.pctUp;
+    db_pctDwn(i) = pfl.pctDwn;
+    db_price(i) = pfl.p0;
     
     % compute maximum draw down
-    maxDrawDown = maxdrawdown(netWorthRec(1:i),'arithmetic');
+    dstMat = repmat(netWorthRec(1,st:i),i-st+1,1);
+    drawDownMat = tril(dstMat-dstMat');
+    maxDrawDown = max(max(drawDownMat));
+    
+
+    
+%     maxDrawDown = maxdrawdown([0,netWorthRec(1:i)],'arithmetic');
     
     clc;
     disp(['Backtest Process: ',num2str(100*(i-window(1))/range(window)),'%']);
-    disp(datestr(date(i)));
+    disp(['Start date: ',datestr(date(window(1)))]);
+    disp(['End date: ',datestr(date(i))]);
     disp([' Net Worth of total asset: ',num2str(pfl.netWorth)]);
     disp([' Cash (relized net profit): ',num2str(pfl.cash)]);
     disp([' Market Value of option basket: ',num2str(pfl.portfolioMarketValue)]);
@@ -140,46 +173,109 @@ fmt = 'yyyymmdd';
 % * High percentile threshold is set at 50%
 % * Low percentile threshold is set at 0%
 % * This file is created at 08/09/2016 14:56:28
-fileName = ['backtest_',pfl.symbol,'_',datestr(date(window(1)),fmt),'_',datestr(date(window(end)),fmt),'_','bp-',num2str(pfl.orderLimit),'_H',num2str(pfl.pctHighFilter),'L',num2str(pfl.pctLowFilter),'_',datestr(now,'yyyymmddHHMMSS')];
-save(fileName,'netWorthRec','excutedOrders');
+
+% fileName = ['backTestResults\backtest_',pfl.symbol,'_',datestr(date(window(1)),fmt),'_',datestr(date(window(end)),fmt),'_','bp-',num2str(pfl.orderLimit),'_H',num2str(pfl.pctHighFilter),'L',num2str(pfl.pctLowFilter),'_',datestr(now,'yyyymmddHHMMSS')];
+% save(fileName,'netWorthRec','excutedOrders');
 comparedPar = cat(1,comparedPar,[num2str(hfilter),'-',num2str(lfilter)]);
-comparedRec = cat(1,comparedRec,netWorthRec);
+comparedNet = cat(1,comparedNet,netWorthRec);
 comparedMDD = cat(2,comparedMDD,maxDrawDown);
-pfl.reset();
+% pfl.reset();
     end
 end
 
-save('gridSearch.mat','comparedRec','window','comparedPar','comparedMDD')
+% save('gridSearch.mat','comparedRec','window','comparedPar','comparedMDD')
+
+% 
+% figure;
+% subplot(2,2,1); hold on;
+% for i = 1:size(comparedRec,1)
+%     plot(comparedRec(i,window));
+% end
+% legend(comparedPar,'Location','West');
+% title('ALL');
+% 
+% subplot(2,2,2); hold on;
+% head = [1:3,7,11,15];
+% for i = 1:size(comparedRec(head,:),1)
+%     plot(comparedRec(head(i),window));
+% end
+% legend(comparedPar(head),'Location','West');
+% title('One side Iron Condor');
+% 
+% subplot(2,2,3); hold on;
+% head = [4:6,8:10,12:14];
+% for i = 1:size(comparedRec(head,:),1)
+%     plot(comparedRec(head(i),window));
+% end
+% legend(comparedPar(head),'Location','West');
+% title('Two side Iron Condor');
+% 
+% subplot(2,2,4); hold on;
+% head = [6,9,12];
+% for i = 1:size(comparedRec(head,:),1)
+%     plot(comparedRec(head(i),window));
+% end
+% legend(comparedPar(head),'Location','West');
+% title('Symetric Iron Condor');
+
+    dstMat = repmat(netWorthRec(1,st:i),i-st+1,1);
+    drawDownMat = tril(dstMat-dstMat');
+    maxDrawDown = max(max(drawDownMat));
 
 
-figure;
-subplot(2,2,1); hold on;
-for i = 1:size(comparedRec,1)
-    plot(comparedRec(i,window));
-end
-legend(comparedPar,'Location','West');
-title('ALL');
 
-subplot(2,2,2); hold on;
-head = [1:3,7,11,15];
-for i = 1:size(comparedRec(head,:),1)
-    plot(comparedRec(head(i),window));
-end
-legend(comparedPar(head),'Location','West');
-title('One side Iron Condor');
 
-subplot(2,2,3); hold on;
-head = [4:6,8:10,12:14];
-for i = 1:size(comparedRec(head,:),1)
-    plot(comparedRec(head(i),window));
-end
-legend(comparedPar(head),'Location','West');
-title('Two side Iron Condor');
+figure();
+subplot(10,1,[1;2;3]);
+hold on;
+plot(date(window),[netWorthRec(window);[0,diff(netWorthRec((window)))]]);
+set(gca,'XTick',[]);
+legend({'Net Worth','Net Worth Change'},'Location','NorthWest');
+plot(date(window),zeros(1,size(window,2)),'k--');
+title([num2str(pfl.pctHighFilter),'-',num2str(pfl.pctLowFilter)]);
+[blackSheep(1),blackSheep(2)] = find(drawDownMat==maxDrawDown,1);
+MDDX = date(st+blackSheep(2)-1); MDDY = netWorthRec(st+blackSheep(1)-1);
+MDDPos = [date(st+blackSheep(2)-1), netWorthRec(st+blackSheep(1)-1),date(st+blackSheep(1)-1)-date(st+blackSheep(2)-1),maxDrawDown];
+rectangle('Position',MDDPos,'LineStyle','-.');
+text(MDDX,MDDY+2,['Max Draw-down: ',num2str(maxDrawDown)]);
+axis tight;
 
-subplot(2,2,4); hold on;
-head = [6,9,12];
-for i = 1:size(comparedRec(head,:),1)
-    plot(comparedRec(head(i),window));
-end
-legend(comparedPar(head),'Location','West');
-title('Symetric Iron Condor');
+subplot(10,1,4);
+bar(date(window),db_VIXFlag(window));
+set(gca,'XTick',[]);
+set(gca,'YTick',[]);
+title('VIX');
+axis tight;
+
+subplot(10,1,5);          
+bar(date(window),db_policyFlag(window));
+set(gca,'XTick',[]);
+set(gca,'YTick',[]);
+title('Policy');
+axis tight;
+
+subplot(10,1,6);
+bar(date(window),db_MTMFlag(window));
+set(gca,'XTick',[]);
+set(gca,'YTick',[]);
+title('MarkToMarket');
+axis tight;
+
+subplot(10,1,[7,8]);
+% bar(db_premiumFlag);
+plot(db_price(window));
+set(gca,'XTick',[]);
+set(gca,'YTick',[]);
+% title('If premium <-1');
+title([pfl.symbol,' Price']);
+% axis tight;
+
+subplot(10,1,[9,10]);
+hold on;
+plot(date(window),db_VIX(window));
+plot(date(window),db_pctUp(window));
+plot(date(window),db_pctDwn(window));
+datetick('x','yy-mm');
+set(gca,'YTick',[]);
+title('VIX');
+axis tight;

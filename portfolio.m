@@ -1,5 +1,5 @@
-% Date  Put/Call  K  Exp  XX  bid  ask  mid  IV  Delta  F   DTE
-% 1       2      3   4    5   6    7    8    9   10    11  12
+% Date  C(1)/P(2)  K  Exp  XX  bid  ask  mid  IV  Delta  F   DTE
+% 1        2       3   4    5   6    7    8    9   10    11  12
 % format longG
 classdef portfolio < handle
     properties
@@ -16,7 +16,11 @@ classdef portfolio < handle
         VIX;
         VIXlog = [];
         VIXFlag = 1;
-        signalCondition
+        policyFlag = 0;
+        premiumFlag = 0;
+        MTMFlag = 1;
+        ICFlag = 0;
+        signalCondition;
         excutedOrders = [];
         pendingOrders = [];
         netPosition = zeros(0,10);
@@ -33,13 +37,33 @@ classdef portfolio < handle
         grossSum;
         feeSum;
         netSum;
+        premium;
         pctHighFilter = 50;
         pctLowFilter = 0;
-        c_yahoo = yahoo;
-        c_fed = fred('https://research.stlouisfed.org/fred2/');
+        pctUp = NaN;
+        pctDwn = NaN;
+        c_yahoo;
+        c_fed;
+        dataSufficiency;
     end
     
     methods
+        
+        function setFetchMode(self,modeStr,para1,para2)
+            if nargin <3
+                para1 = [];
+                para2 = [];
+            end
+            if strcmpi(modeStr,'online')
+                self.fetchMode = 'Online';
+                self.c_yahoo = yahoo;
+                self.c_fed = fred('https://research.stlouisfed.org/fred2/');
+            elseif strcmpi(modeStr,'offline')
+                self.fetchMode = 'Offline';
+                self.p0List = para1;
+                self.rfList = para2;
+            end
+        end
         
         function reset(self)
             self.cash = 0;
@@ -67,23 +91,11 @@ classdef portfolio < handle
             data = self.mktInfo(condition,:);
 
             if size(data,1)<1
-                self.VIXFlag = 0;
+                self.VIXFlag = -1;
                 self.VIX = NaN;
                 self.VIXlog = cat(1,self.VIXlog,[self.currentDay,self.VIX]);
             else
                 self.VIXFlag = 1;
-            
-
-                %Close price for the underlying asset in current iteration
-                if strcmpi(self.fetchMode,'Online')
-                    self.p0 = fetch(self.c_yahoo,self.symbol,'Close',datestr(currentTerm));
-                    self.p0 = self.p0(:,2);
-                elseif strcmpi(self.fetchMode,'Offline')
-                    self.p0 = self.p0List(self.p0List(:,1)==self.currentDay,2);
-                else
-                    error('fetchMode: "Online" OR "Offline');
-                end
-
 
                 %Expiration of near term and next term
                 %(usually there are only two options with DTEs between(23-37 days)
@@ -236,6 +248,20 @@ classdef portfolio < handle
             self.mktInfo = newMktInfo;
             self.currentDay = unique(self.mktInfo(:,1));
             self.pendingOrders = [];
+            
+            %Close price for the underlying asset in current iteration
+                if strcmpi(self.fetchMode,'Online')
+                    self.p0 = fetch(self.c_yahoo,self.symbol,'Close',datestr(currentTerm));
+                    self.p0 = self.p0(:,2);
+                elseif strcmpi(self.fetchMode,'Offline')
+                    self.p0 = self.p0List(self.p0List(:,1)==self.currentDay,2);
+                else
+                    error('fetchMode: "Online" OR "Offline');
+                end
+            
+            if size(self.p0,1) == 0
+                self.p0 = 0;
+            end
         end
         
         function markToMarket(self)
@@ -249,7 +275,9 @@ classdef portfolio < handle
                     longshort = sufficientStat(-self.netPosition(i,4));
                     ordersTypeVec = self.orderType;
                     self.netPosition(i,10) = -longshort*excutePrices'*ordersTypeVec';
+                    self.MTMFlag = 1;
                 catch
+                    self.MTMFlag = -1;
                 end
             end
             
@@ -279,93 +307,143 @@ classdef portfolio < handle
             
             
             %                1      2   3      4      5     6      7     8    9
-            %netPosition: Put/Call  K  Exp  position  IV  Delta  Gross  Fee  Net
+            %netPosition:  C1P2     K  Exp  position  IV  Delta  Gross  Fee  Net
             %policy starts here
             
             % search the most recent expiration day between 45-60
             targetExp = min(self.mktInfo(self.mktInfo(:,12)>45 & self.mktInfo(:,12)<60,4));
             
-            % requirements for policy (data sufficiency requirement)
-            self.signalCondition = size(self.VIXlog(~isnan(self.VIXlog(:,2)),2),1)>61 &&... %more than 60 historical VIXes in record
-                size(targetExp,1)>0 &&...at least one option expires between 45-60 days
-                sum(abs(self.netPosition(:,4)))<self.orderLimit;% &&...% less than 20 options in the basket
+            % requirements for policy (data sufficiency requirement+buyingPower limit)
+            self.dataSufficiency = size(self.VIXlog(~isnan(self.VIXlog(:,2)),2),1)>60 &&... % more than 60 historical VIXes in record
+                size(targetExp,1)>0;% at least one option expires between 45-60 days
+                
+            if self.dataSufficiency
+                self.policyFlag = -1;
+            else
+                self.policyFlag = 0;
+            end
+            
+            self.signalCondition = self.dataSufficiency && sum(abs(self.netPosition(:,4)))<self.orderLimit;% &&...% less than 20 options in the basket
                 %~ismember(targetExp,self.netPosition(:,3));% two IC sets must expire at different dates(15 days apart at least)
             
+                
+                
+                
 %             disp(self.signalCondition);
             
             % if data is sufficient, check VIX rank
             if self.signalCondition == 1
-                validVIX = self.VIXlog(~isnan(self.VIXlog(:,2)),:);
-                pctUp = prctile(validVIX(end-61:end-1,2),self.pctHighFilter);
-                pctDwn = prctile(validVIX(end-61:end-1,2),self.pctLowFilter);
-%                 disp(pct);
+                validVIX = self.VIXlog(~isnan(self.VIXlog(:,2)),:);%
+                self.pctUp = prctile(validVIX(end-59:end,2),100-self.pctHighFilter);
+                self.pctDwn = prctile(validVIX(end-59:end,2),self.pctLowFilter);
+                %                 disp(pct);
                 
                 %check VIX rank
                 % (policy is computationally expensive, do it only when needed)
-                if self.VIX>=pctUp || self.VIX<=pctDwn
-%                     disp('YEAH-------------');
+                
+                if self.VIX>self.pctUp
+                    self.ICFlag = 1;
+                elseif self.VIX<self.pctDwn
+                    self.ICFlag = -1;
+                else
+                    self.ICFlag = 0;
+                end
+                
+                if  self.ICFlag ~=0;
+                    %                     disp('YEAH-------------');
                     
                     % extract available strike price list
                     klist = self.mktInfo(:,3);
+%                     disp(self.p0);
                     %short call
-                    ka = min(klist(klist>self.p0));
+                    ka = ceil(self.p0);
+%                     disp(ka)
                     %short put
-                    kb = max(klist(klist<self.p0));
-                    %long call
-                    kc = ka+2;
-                    %long put
-                    kd = kb-2;
-                    
-                    pointerList = [2,kd,targetExp;...
-                        2,kb,targetExp;...
-                        1,ka,targetExp;...
-                        1,kc,targetExp];
-                    
-                    ironCondor = [self.mktInfo(ismember(self.mktInfo(:,[2,3,4]),pointerList(1,:),'rows'),:);%kd long put
-                        self.mktInfo(ismember(self.mktInfo(:,[2,3,4]),pointerList(2,:),'rows'),:);%kb short put
-                        self.mktInfo(ismember(self.mktInfo(:,[2,3,4]),pointerList(3,:),'rows'),:);%ka short call
-                        self.mktInfo(ismember(self.mktInfo(:,[2,3,4]),pointerList(4,:),'rows'),:)];%kc long call
-                    
-                    
-%                     disp(size(ironCondor));
-                    
-                    if self.VIX > pctUp % high VIX -> Iron Condor
-                        longShortANDorderType = cat(2,...
-                            [1,0;...
-                            0,-1;...
-                            0,-1;...
-                            1,0],...
-                            repmat(self.orderType,4,1));
-                    elseif self.VIX < pctDwn % low VIX -> reversed Iron Condor
-                        longShortANDorderType = cat(2,...
-                            [0,-1;...
-                            1,0;...
-                            1,0;...
-                            0,-1],...
-                            repmat(self.orderType,4,1));
-                    else
-                        % do nothing
+                    kb = floor(self.p0);
+%                     disp(kb)
+                        
+                    if self.ICFlag == 1
+                        self.premium = -999;
+                    elseif self.ICFlag == -1
+                        self.premium = 999;
                     end
                     
-                    if size(ironCondor,1) == 4 % sometimes IC is not available
-                        self.activeOrders = [ironCondor,longShortANDorderType];
-
-                        % compute gross/fee/net cashflow impact of the orders
-                        for i  = 1:size(self.activeOrders,1)
-                        excutePrices = [self.activeOrders(i,[6,7]);self.activeOrders(i,[7,6]);self.activeOrders(i,[8,8])];
-                        longshort = self.activeOrders(i,[13,14]);
-                        ordersTypeVec = self.activeOrders(i,[15,16,17]);
-                        gross = -longshort*excutePrices'*ordersTypeVec';
-                        fee = abs(gross)*self.feeRate+self.fixFee;
-                        net = gross - fee;
-                        self.activeOrders(i,18:20) = [gross,fee,net];
+                    while self.premium*self.ICFlag < -1
+                        %long call
+                        kc = ka+2;
+                        %long put
+                        kd = kb-2;
+                        
+                        pointerList = [2,kd,targetExp;...
+                            2,kb,targetExp;...
+                            1,ka,targetExp;...
+                            1,kc,targetExp];
+                        
+                        ironCondor = [self.mktInfo(ismember(self.mktInfo(:,[2,3,4]),pointerList(1,:),'rows'),:);%kd long put
+                            self.mktInfo(ismember(self.mktInfo(:,[2,3,4]),pointerList(2,:),'rows'),:);%kb short put
+                            self.mktInfo(ismember(self.mktInfo(:,[2,3,4]),pointerList(3,:),'rows'),:);%ka short call
+                            self.mktInfo(ismember(self.mktInfo(:,[2,3,4]),pointerList(4,:),'rows'),:)];%kc long call
+                        
+                        
+                        %                     disp(size(ironCondor));
+                        
+                        if self.VIX > self.pctUp % high VIX -> Iron Condor
+                            longShortANDorderType = cat(2,...
+                                [1,0;...
+                                0,-1;...
+                                0,-1;...
+                                1,0],...
+                                repmat(self.orderType,4,1));
+                        elseif self.VIX < self.pctDwn % low VIX -> reversed Iron Condor
+                            longShortANDorderType = cat(2,...
+                                [0,-1;...
+                                1,0;...
+                                1,0;...
+                                0,-1],...
+                                repmat(self.orderType,4,1));
+                        else
+                            % do nothing
                         end
                         
+                        %                     disp(size(ironCondor,1));
+                        if size(ironCondor,1) == 4 % sometimes IC is not available
+                            self.activeOrders = [ironCondor,longShortANDorderType];
+                            self.policyFlag = 1;
+                            % compute gross/fee/net cashflow impact of the orders
+                            for i  = 1:size(self.activeOrders,1)
+                                excutePrices = [self.activeOrders(i,[6,7]);self.activeOrders(i,[7,6]);self.activeOrders(i,[8,8])];
+                                longshort = self.activeOrders(i,[13,14]);
+                                ordersTypeVec = self.activeOrders(i,[15,16,17]);
+                                gross = -longshort*excutePrices'*ordersTypeVec';
+                                fee = abs(gross)*self.feeRate+self.fixFee;
+                                net = gross - fee;
+                                self.activeOrders(i,18:20) = [gross,fee,net];
+                            end
+                        else
+                            self.policyFlag = -2;
+                        end
+                        
+                        
+                        self.premium = sum(self.activeOrders(:,18));
+                        if self.premium*self.ICFlag <-1
+                            self.premiumFlag = 1;
+                            if abs(ka-self.p0)<abs(kb-self.p0)
+                                ka = min(klist(klist>ka));
+                            else
+                                kb = max(klist(klist<kb));
+                            end
+                        else
+                            self.premiumFlag = 0;
+                        end
                     end
-                    
                 else
                     %do nothing
+                    self.policyFlag = 0;
                 end
+                
+            else
+                % do nothing
+                % self.policyFlag is no longer handled here
                 
             end
             

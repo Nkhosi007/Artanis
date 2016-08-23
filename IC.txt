@@ -1,0 +1,13 @@
+Iron Condor: K1 < K2 < K3 < K4
+
+Long K1 Put, Short K2 Put, Short K3 Call, Long K4 Call
+
+¡¤         Find DTE: The first DTE that¡¯s larger than 45. If the DTE is less than 60 and IV rank is larger than 50, pick that one. Otherwise, pick no positions.
+¡¤         Find the four strikes:
+1.     Find the first strike larger than underlying: Ka, and the first strike less than underlying: Kb
+2.     Calculate the price of Long Kb-2 Put, Short Kb Put, Short Ka Call, Long Ka+2 Call, assume the price is P (P should be negative)
+3.     If P>=-1, pick that position. Otherwise, it means we collect too much premium, then go to step 4
+4.     If abs(Ka-underlying)< abs(Kb-underlying), replace Ka to be the first strike larger than Ka. 
+If abs(Ka-underlying)>abs(Kb-underlying), replace Kb to be the first strike less than Kb. 
+Then go to step 2.
+ 
