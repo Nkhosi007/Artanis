@@ -266,19 +266,29 @@ classdef portfolio < handle
         
         function markToMarket(self)
            
-            for i = 1:size(self.netPosition,1)
-                pointer = self.netPosition(i,[1,2,3]);
-                head = ismember(self.mktInfo(:,[2,3,4]),pointer,'rows');
-                
-                try
-                    excutePrices = [self.mktInfo(head,[6,7]);self.mktInfo(head,[7,6]);self.mktInfo(head,[8,8])];
-                    longshort = sufficientStat(-self.netPosition(i,4));
-                    ordersTypeVec = self.orderType;
-                    self.netPosition(i,10) = -longshort*excutePrices'*ordersTypeVec';
-                    self.MTMFlag = 1;
-                catch
-                    self.MTMFlag = -1;
+            if size(self.netPosition,1) == 0 %if we have not holdings at all
+                self.MTMFlag = 1;
+            
+            else
+                self.MTMFlag = 0;
+                for i = 1:size(self.netPosition,1)
+                    pointer = self.netPosition(i,[1,2,3]);
+                    head = ismember(self.mktInfo(:,[2,3,4]),pointer,'rows');
+
+                    try
+                        excutePrices = [self.mktInfo(head,[6,7]);self.mktInfo(head,[7,6]);self.mktInfo(head,[8,8])];
+                        longshort = sufficientStat(-self.netPosition(i,4));
+                        ordersTypeVec = self.orderType;
+                        self.netPosition(i,10) = -longshort*excutePrices'*ordersTypeVec';
+                        self.MTMFlag = self.MTMFlag+1/size(self.netPosition,1);
+                    catch
+    %                     self.MTMFlag = -1;
+                    end
                 end
+                
+                % market prices are sometimes weird near expiration
+                
+                
             end
             
             self.portfolioMarketValue = sum(self.netPosition(:,10));
@@ -487,6 +497,7 @@ classdef portfolio < handle
         
         function excute(self)
             
+            % for pending orders
             if size(self.pendingOrders,1) >0
             pointerList = unique(self.pendingOrders(:,[2,3,4]),'rows');
                 for j = 1:size(pointerList,1)
@@ -514,18 +525,31 @@ classdef portfolio < handle
                     end
                 end
             
-            %                1      2   3      4      5     6      7     8    9
-            %netPosition: Put/Call  K  Exp  position  IV  Delta  Gross  Fee  Net
+            %                1      2   3      4      5     6      7     8    9   10
+            %netPosition: Put/Call  K  Exp  position  IV  Delta  Gross  Fee  Net MktVal
             
             self.excutedOrders = cat(1,self.excutedOrders,self.pendingOrders);
             self.cash = self.cash + sum(self.pendingOrders(:,20));
             self.pendingOrders = zeros(0,20);
             self.activeOrders = zeros(0,20);
             self.expiredOrders = zeros(0,20);
-            self.netPosition = self.netPosition(self.netPosition(:,4)~=0,:);
+           
 %             self.markToMarket();
 %             self.netWorth = self.cash + self.portfolioMarketValue;
             end
+            
+            % for expired options
+            for i = 1:size(self.netPosition,1)
+                if self.netPosition(i,3) <= self.currentDay
+                    self.cash = self.cash + self.netPosition(i,10);
+                    self.netPosition(i,4) = 0;
+                else
+                    %nothing to do with not-expired options
+                end
+            end
+            
+             self.netPosition = self.netPosition(self.netPosition(:,4)~=0,:);
+            
         end
 
  % Date  Put/Call  K    Exp   XX   bid   ask   mid   IV    Delta   F   DTE  Long Short limitOrder mktOrder midOrder GrossFlow Fee NetFlow   /end

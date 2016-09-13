@@ -1,6 +1,7 @@
-
+song = ones(200,1)*0.5;
+tone = 8192;
 %======================Uncomment this part only at first run=============
-format longg;
+
 try
 date = unique(optionsSPY(:,1));
 catch
@@ -30,8 +31,8 @@ dbstop if error;
 % 1       2      3   4    5   6    7    8    9   10    11  12   /end
 
 % net position looks like this:
-% Put/Call  K  Exp  position  IV  Delta  Gross  Fee  Net /end
-%   1      2   3      4      5     6      7     8    9   /end
+% Put/Call  K  Exp  position  IV  Delta  Gross  Fee  Net GFNInc /end
+%   1      2   3      4      5     6      7     8    9     10   /end
 
 % An order looks like this:
 % Date  Put/Call  K    Exp   XX   bid   ask   mid   IV    Delta   F   DTE  Long Short limitOrder mktOrder midOrder GrossFlow Fee NetFlow   /end
@@ -40,7 +41,7 @@ dbstop if error;
 % back test from the 301th day till the end of historical data
 % (data before 301th day is massy)
 st = 300;
-window = st:size(date,1);
+window = st:1550;%size(date,1);
 
 % initiate an instance
 pfl = portfolio();
@@ -93,8 +94,9 @@ db_price = zeros(1,window(end));
 % cmp_VIXFlag = [];
 % cmp_policyFlag = [];
 % cmp_MTMFlag = [];
-hfilterList = [25,];
+hfilterList = [20,];
 lfilterList = [0,];
+waitbar(progressBar,'Back Testing');
 for hfilter = hfilterList
     for lfilter = lfilterList
         if hfilter == 0 && lfilter == 0
@@ -113,8 +115,9 @@ for i = window
     pfl.computeVIX();
     pfl.policy(hfilter,lfilter);
     
-    % scan for about-to-expired options and close positions
-    pfl.settleExpiredOptions();
+    % ======not needed anymore=======scan for about-to-expired options and close positions
+    % pfl.settleExpiredOptions();
+    % ======expired options are handled by excute() now ===========
     
     % both policy() and settleExpiredOptions() generates orders and put
     % them in pendingOrders, excute() will finish the job
@@ -149,7 +152,9 @@ for i = window
 %     maxDrawDown = maxdrawdown([0,netWorthRec(1:i)],'arithmetic');
     
     clc;
-    disp(['Backtest Process: ',num2str(100*(i-window(1))/range(window)),'%']);
+    progressBar = (i-window(1))/range(window);
+    waitbar(progressBar);
+    disp(['Backtest Process: ',num2str(100*progressBar),'%']);
     disp(['Start date: ',datestr(date(window(1)))]);
     disp(['End date: ',datestr(date(i))]);
     disp([' Net Worth of total asset: ',num2str(pfl.netWorth)]);
@@ -263,12 +268,12 @@ axis tight;
 
 subplot(10,1,[7,8]);
 % bar(db_premiumFlag);
-plot(db_price(window));
+plot(date(window),db_price(window));
 set(gca,'XTick',[]);
 set(gca,'YTick',[]);
 % title('If premium <-1');
 title([pfl.symbol,' Price']);
-% axis tight;
+axis auto;
 
 subplot(10,1,[9,10]);
 hold on;
@@ -279,3 +284,5 @@ datetick('x','yy-mm');
 set(gca,'YTick',[]);
 title('VIX');
 axis tight;
+
+sound(song,tone);
