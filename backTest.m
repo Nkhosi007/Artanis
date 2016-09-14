@@ -1,47 +1,50 @@
 song = ones(200,1)*0.5;
 tone = 8192;
+format longg
+dbstop if error;
 %======================Uncomment this part only at first run=============
+symbol = 'AAPL';
+optionDataFile = ['options',symbol,'.mat'];
+p0DataFile = ['p0List_',symbol,'.mat'];
+rfFile = ['rfList_',symbol,'.mat'];
+% try
+% date = unique(mktInfoFile(:,1));
+% catch
+mktInfoFile = getfield(load(optionDataFile),['options',symbol]);
+date = unique(mktInfoFile(:,1));
+% end
 
-try
-date = unique(optionsSPY(:,1));
-catch
-load('optionsSPY.mat');
-date = unique(optionsSPY(:,1));
-end
-
-try
-  load('p0List_SPY.mat');
-catch
+% try
+%   load(p0DataFile);
+% catch
   c_yahoo = yahoo;
-  p0List = flip(fetch(c_yahoo,'SPY','Close',datestr(date(1)),datestr(date(end))));
-end
+  p0List = flip(fetch(c_yahoo,symbol,'Close',datestr(date(1)),datestr(date(end))));
+% end
 
 try
-  load('rfList_SPY.mat');
+  load(rfFile);
 catch
   c_fed = fred('https://research.stlouisfed.org/fred2/');
   rfList = fetch(c_fed,'TB4WK',datestr(date(1)),datestr(date(end)));
 end
 %==================================END===================================
 
-dbstop if error;
-
 % local historical data looks like this:
-% Date  Put/Call  K  Exp  XX  bid  ask  mid  IV  Delta  F   DTE /end
-% 1       2      3   4    5   6    7    8    9   10    11  12   /end
+% Date  C(1)/P(2)  K  Exp  XX  bid  ask  mid  IV  Delta  F   DTE /end
+% 1       2        3   4    5   6    7    8    9   10    11  12   /end
 
 % net position looks like this:
-% Put/Call  K  Exp  position  IV  Delta  Gross  Fee  Net GFNInc /end
-%   1      2   3      4      5     6      7     8    9     10   /end
+% C(1)/P(2)  K  Exp  position  IV  Delta  Gross  Fee  Net GFNInc /end
+%   1        2   3      4      5     6      7     8    9     10   /end
 
 % An order looks like this:
-% Date  Put/Call  K    Exp   XX   bid   ask   mid   IV    Delta   F   DTE  Long Short limitOrder mktOrder midOrder GrossFlow Fee NetFlow   /end
-% 1       2      3      4     5    6     7     8     9    10     11    12   13   14       15        16       17        18     19   20      /end    
+% Date  C(1)/P(2)  K    Exp   XX   bid   ask   mid   IV    Delta   F   DTE  Long Short limitOrder mktOrder midOrder GrossFlow Fee NetFlow   /end
+% 1       2        3      4     5    6     7     8     9    10     11    12   13   14       15        16       17        18     19   20      /end    
 
 % back test from the 301th day till the end of historical data
 % (data before 301th day is massy)
-st = 300;
-window = st:1550;%size(date,1);
+startPoint = 300;
+window = startPoint:1400;%size(date,1);
 
 % initiate an instance
 pfl = portfolio();
@@ -52,6 +55,7 @@ pfl = portfolio();
 % to assure no future data is used but significantly increases run time.
 pfl.fetchMode = 'Offline'; 
 pfl.setFetchMode('offline',p0List,rfList.Data);
+pfl.symbol = symbol;
 
 % If using offline backtest mode, assign the local data set
 %pfl.p0List = p0List; % underlying asset prices
@@ -83,6 +87,9 @@ netWorthRec = zeros(1,window(end));
 comparedPar = {};
 comparedNet = [];
 comparedMDD = [];
+comparedWinRate = [];
+comparedSum = [];
+comparedAvgRank = [];
 db_VIXFlag = zeros(1,window(end));
 db_policyFlag = zeros(1,window(end));
 db_MTMFlag = zeros(1,window(end));
@@ -91,24 +98,26 @@ db_premiumFlag = zeros(1,window(end));
 db_pctUp = zeros(1,window(end));
 db_pctDwn = zeros(1,window(end));
 db_price = zeros(1,window(end));
+db_winRec = zeros(1,window(end));
 % cmp_VIXFlag = [];
 % cmp_policyFlag = [];
 % cmp_MTMFlag = [];
-hfilterList = [20,];
+hfilterList = [30];
 lfilterList = [0,];
-waitbar(progressBar,'Back Testing');
+% waitbar(progressBar,'Back Testing');
 for hfilter = hfilterList
     for lfilter = lfilterList
         if hfilter == 0 && lfilter == 0
             continue;
         end
+        pfl.reset();
 tic;
 for i = window
     % move to day i
     day = date(i);
     
     % feed day i's market data to the instance
-    mktInfo = optionsSPY(optionsSPY(:,1)==day,:);
+    mktInfo = mktInfoFile(mktInfoFile(:,1)==day,:);
     pfl.getMktInfo(mktInfo);
     
     % compute VIX, run IronCondor strategy
@@ -141,9 +150,10 @@ for i = window
     db_pctUp(i) = pfl.pctUp;
     db_pctDwn(i) = pfl.pctDwn;
     db_price(i) = pfl.p0;
+    db_winRec(i) = pfl.winFlag;
     
     % compute maximum draw down
-    dstMat = repmat(netWorthRec(1,st:i),i-st+1,1);
+    dstMat = repmat(netWorthRec(1,startPoint:i),i-startPoint+1,1);
     drawDownMat = tril(dstMat-dstMat');
     maxDrawDown = max(max(drawDownMat));
     
@@ -151,16 +161,16 @@ for i = window
     
 %     maxDrawDown = maxdrawdown([0,netWorthRec(1:i)],'arithmetic');
     
-    clc;
+%     clc;
     progressBar = (i-window(1))/range(window);
     waitbar(progressBar);
-    disp(['Backtest Process: ',num2str(100*progressBar),'%']);
-    disp(['Start date: ',datestr(date(window(1)))]);
-    disp(['End date: ',datestr(date(i))]);
-    disp([' Net Worth of total asset: ',num2str(pfl.netWorth)]);
-    disp([' Cash (relized net profit): ',num2str(pfl.cash)]);
-    disp([' Market Value of option basket: ',num2str(pfl.portfolioMarketValue)]);
-    disp([' Max Draw Down: ', num2str(maxDrawDown)]);
+%     disp(['Backtest Process: ',num2str(100*progressBar),'%']);
+%     disp(['Start date: ',datestr(date(window(1)))]);
+%     disp(['End date: ',datestr(date(i))]);
+%     disp([' Net Worth of total asset: ',num2str(pfl.netWorth)]);
+%     disp([' Cash (relized net profit): ',num2str(pfl.cash)]);
+%     disp([' Market Value of option basket: ',num2str(pfl.portfolioMarketValue)]);
+%     disp([' Max Draw Down: ', num2str(maxDrawDown)]);
     
 end
 toc;
@@ -181,23 +191,31 @@ fmt = 'yyyymmdd';
 
 % fileName = ['backTestResults\backtest_',pfl.symbol,'_',datestr(date(window(1)),fmt),'_',datestr(date(window(end)),fmt),'_','bp-',num2str(pfl.orderLimit),'_H',num2str(pfl.pctHighFilter),'L',num2str(pfl.pctLowFilter),'_',datestr(now,'yyyymmddHHMMSS')];
 % save(fileName,'netWorthRec','excutedOrders');
+
+forsum = db_policyFlag(window);
+forrank = db_pctUp(window);
+comparedWinRate = cat(2,comparedWinRate, sum(db_winRec==1)/(sum(db_winRec==-1)+sum(db_winRec==1)));
 comparedPar = cat(1,comparedPar,[num2str(hfilter),'-',num2str(lfilter)]);
 comparedNet = cat(1,comparedNet,netWorthRec);
 comparedMDD = cat(2,comparedMDD,maxDrawDown);
-% pfl.reset();
+comparedSum = cat(1,comparedSum,sum(forsum(forsum>=0)));
+comparedAvgRank = cat(1,comparedAvgRank,mean(forrank(~isnan(forrank))));
+
     end
 end
 
 % save('gridSearch.mat','comparedRec','window','comparedPar','comparedMDD')
 
 % 
-% figure;
-% subplot(2,2,1); hold on;
-% for i = 1:size(comparedRec,1)
-%     plot(comparedRec(i,window));
-% end
-% legend(comparedPar,'Location','West');
-% title('ALL');
+figure;
+subplot(10,1,[1;2;3]);
+hold on;
+for j = 1:size(comparedNet,1)
+    plot(date(window),comparedNet(j,window));
+end
+legend(comparedPar,'Location','West');
+set(gca,'XTick',[]);
+title(['From  ' ,datestr(date(window(1))),' to  ',datestr(date(window(end)))]);
 % 
 % subplot(2,2,2); hold on;
 % head = [1:3,7,11,15];
@@ -223,27 +241,27 @@ end
 % legend(comparedPar(head),'Location','West');
 % title('Symetric Iron Condor');
 
-    dstMat = repmat(netWorthRec(1,st:i),i-st+1,1);
+    dstMat = repmat(netWorthRec(1,startPoint:i),i-startPoint+1,1);
     drawDownMat = tril(dstMat-dstMat');
     maxDrawDown = max(max(drawDownMat));
 
 
 
 
-figure();
-subplot(10,1,[1;2;3]);
-hold on;
-plot(date(window),[netWorthRec(window);[0,diff(netWorthRec((window)))]]);
-set(gca,'XTick',[]);
-legend({'Net Worth','Net Worth Change'},'Location','NorthWest');
-plot(date(window),zeros(1,size(window,2)),'k--');
-title([num2str(pfl.pctHighFilter),'-',num2str(pfl.pctLowFilter)]);
-[blackSheep(1),blackSheep(2)] = find(drawDownMat==maxDrawDown,1);
-MDDX = date(st+blackSheep(2)-1); MDDY = netWorthRec(st+blackSheep(1)-1);
-MDDPos = [date(st+blackSheep(2)-1), netWorthRec(st+blackSheep(1)-1),date(st+blackSheep(1)-1)-date(st+blackSheep(2)-1),maxDrawDown];
-rectangle('Position',MDDPos,'LineStyle','-.');
-text(MDDX,MDDY+2,['Max Draw-down: ',num2str(maxDrawDown)]);
-axis tight;
+% figure();
+% subplot(10,1,[1;2;3]);
+% hold on;
+% plot(date(window),[netWorthRec(window);[0,diff(netWorthRec((window)))]]);
+% set(gca,'XTick',[]);
+% legend({'Net Worth','Net Worth Change'},'Location','NorthWest');
+% plot(date(window),zeros(1,size(window,2)),'k--');
+% title([num2str(pfl.pctHighFilter),'-',num2str(pfl.pctLowFilter)]);
+% [blackSheep(1),blackSheep(2)] = find(drawDownMat==maxDrawDown,1);
+% MDDX = date(startPoint+blackSheep(2)-1); MDDY = netWorthRec(startPoint+blackSheep(1)-1);
+% MDDPos = [date(startPoint+blackSheep(2)-1), netWorthRec(startPoint+blackSheep(1)-1),date(startPoint+blackSheep(1)-1)-date(startPoint+blackSheep(2)-1),maxDrawDown];
+% rectangle('Position',MDDPos,'LineStyle','-.');
+% text(MDDX,MDDY+2,['Max Draw-down: ',num2str(maxDrawDown)]);
+% axis tight;
 
 subplot(10,1,4);
 bar(date(window),db_VIXFlag(window));
@@ -252,26 +270,26 @@ set(gca,'YTick',[]);
 title('VIX');
 axis tight;
 
-subplot(10,1,5);          
+subplot(10,1,[5,6]);          
 bar(date(window),db_policyFlag(window));
 set(gca,'XTick',[]);
-set(gca,'YTick',[]);
+% set(gca,'YTick',[]);
 title('Policy');
 axis tight;
 
-subplot(10,1,6);
-bar(date(window),db_MTMFlag(window));
-set(gca,'XTick',[]);
-set(gca,'YTick',[]);
-title('MarkToMarket');
-axis tight;
+% subplot(10,1,6);
+% % bar(date(window),db_MTMFlag(window));
+% bar(date(window),db_premiumFlag(window));
+% set(gca,'XTick',[]);
+% set(gca,'YTick',[]);
+% % title('MarkToMarket');
+% title('If |premium| <-1');
+% axis tight;
 
 subplot(10,1,[7,8]);
-% bar(db_premiumFlag);
 plot(date(window),db_price(window));
 set(gca,'XTick',[]);
-set(gca,'YTick',[]);
-% title('If premium <-1');
+% set(gca,'YTick',[]);
 title([pfl.symbol,' Price']);
 axis auto;
 
@@ -285,4 +303,5 @@ set(gca,'YTick',[]);
 title('VIX');
 axis tight;
 
-sound(song,tone);
+disp(['NaN number: ', num2str(sum(isnan(db_VIX)))]);
+% sound(song,tone);

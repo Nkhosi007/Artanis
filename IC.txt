@@ -11,3 +11,15 @@ Long K1 Put, Short K2 Put, Short K3 Call, Long K4 Call
 If abs(Ka-underlying)>abs(Kb-underlying), replace Kb to be the first strike less than Kb. 
 Then go to step 2.
  
+ 
+ % local historical data looks like this:
+% Date  C(1)/P(2)  K  Exp  XX  bid  ask  mid  IV  Delta  F   DTE /end
+% 1       2      3   4    5   6    7    8    9   10    11  12   /end
+
+% net position looks like this:
+% C(1)/P(2)  K  Exp  position  IV  Delta  Gross  Fee  Net MarketVal /end
+%   1      2   3      4      5     6      7     8    9     10   /end
+
+% An order looks like this:
+% Date  C(1)/P(2)  K    Exp   XX   bid   ask   mid   IV    Delta   F   DTE  Long Short limitOrder mktOrder midOrder GrossFlow Fee NetFlow   /end
+% 1       2      3      4     5    6     7     8     9    10     11    12   13   14       15        16       17        18     19   20      /end    

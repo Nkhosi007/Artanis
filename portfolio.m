@@ -6,7 +6,7 @@ classdef portfolio < handle
         currentDay;
         oldMktInfo; %only for testing
         mktInfo;
-        symbol = 'SPY';
+        symbol = '';
         fetchMode = 'Offline';
         p0;
         p0List;
@@ -20,6 +20,7 @@ classdef portfolio < handle
         premiumFlag = 0;
         MTMFlag = 1;
         ICFlag = 0;
+        winFlag = 0;
         signalCondition;
         excutedOrders = [];
         pendingOrders = [];
@@ -87,7 +88,7 @@ classdef portfolio < handle
 
             %Condition of picking valid options for computation
             condition = self.mktInfo(:,1)==currentTerm & ...
-                self.mktInfo(:,12)>23 & self.mktInfo(:,12)<37;
+                self.mktInfo(:,12)>30-7*1 & self.mktInfo(:,12)<30+7*1;
             data = self.mktInfo(condition,:);
 
             if size(data,1)<1
@@ -248,6 +249,7 @@ classdef portfolio < handle
             self.mktInfo = newMktInfo;
             self.currentDay = unique(self.mktInfo(:,1));
             self.pendingOrders = [];
+            self.winFlag = 0;
             
             %Close price for the underlying asset in current iteration
                 if strcmpi(self.fetchMode,'Online')
@@ -287,7 +289,16 @@ classdef portfolio < handle
                 end
                 
                 % market prices are sometimes weird near expiration
-                
+                for i = 1:size(self.netPosition,1)
+                   if self.netPosition(i,3) == self.currentDay
+                       self.netPosition(i,10) = self.netPosition(i,4)...
+                           *((self.netPosition(i,1)==1)*(self.p0-self.netPosition(i,2))...
+                           +(self.netPosition(i,1)==2)*(self.netPosition(i,2)-self.p0));
+                   else
+                       % do nothing
+                   end                                      
+                    
+                end
                 
             end
             
@@ -321,7 +332,7 @@ classdef portfolio < handle
             %policy starts here
             
             % search the most recent expiration day between 45-60
-            targetExp = min(self.mktInfo(self.mktInfo(:,12)>45 & self.mktInfo(:,12)<60,4));
+            targetExp = min(self.mktInfo(self.mktInfo(:,12)>53-7*1 & self.mktInfo(:,12)<53+7*1,4));
             
             % requirements for policy (data sufficiency requirement+buyingPower limit)
             self.dataSufficiency = size(self.VIXlog(~isnan(self.VIXlog(:,2)),2),1)>60 &&... % more than 60 historical VIXes in record
@@ -431,6 +442,7 @@ classdef portfolio < handle
                             end
                         else
                             self.policyFlag = -2;
+                            disp(size(ironCondor,1));
                         end
                         
                         
@@ -446,6 +458,18 @@ classdef portfolio < handle
                             self.premiumFlag = 0;
                         end
                     end
+                    
+                    try
+                    if self.p0List(self.p0List(:,1)==targetExp,2)>=kb &&...
+                            self.p0List(self.p0List(:,1)==targetExp,2)<=ka
+                        self.winFlag = 1;
+                    else
+                        self.winFlag = -1;
+                        disp([kb,self.p0List(self.p0List(:,1)==targetExp,2),ka]);
+                    end
+                    catch ME
+                    end
+                    
                 else
                     %do nothing
                     self.policyFlag = 0;
