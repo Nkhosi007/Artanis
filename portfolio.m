@@ -137,16 +137,23 @@ classdef portfolio < handle
 
 
                 %This is the strike prices list of near term and next term options
-                klist1 = unique(data(data(:,4)==nearTermExpiration,3));
-                klist2 = unique(data(data(:,4)==nextTermExpiration,3));
+                klist1 = sort(intersect(data(data(:,2)==1&data(:,4)==nearTermExpiration,3),...
+                    data(data(:,2)==2&data(:,4)==nearTermExpiration,3),'rows'));
+                klist2 = sort(intersect(data(data(:,2)==1&data(:,4)==nextTermExpiration,3),...
+                    data(data(:,2)==2&data(:,4)==nextTermExpiration,3),'rows'));
+%                 klist2 = unique(data(data(:,4)==nextTermExpiration,3));
 
                 %Extract the nearet term table and next term table
-                nearTerm = [klist1,data(data(:,2)==1&data(:,4)==nearTermExpiration,8),...
-                    data(data(:,2)==2&data(:,4)==nearTermExpiration,[8,11])];
+                nearTerm = [klist1,data(ismember(data(:,3),klist1)&...
+                    data(:,2)==1&data(:,4)==nearTermExpiration,8),...
+                    data(ismember(data(:,3),klist1)&...
+                        data(:,2)==2&data(:,4)==nearTermExpiration,[8,11])];
                 nearTerm = [nearTerm,nearTerm(:,2)-nearTerm(:,3)];
 
-                nextTerm = [klist2,data(data(:,2)==1&data(:,4)==nextTermExpiration,8),...
-                    data(data(:,2)==2&data(:,4)==nextTermExpiration,[8,11])];
+                nextTerm = [klist2,data(ismember(data(:,3),klist2)&...
+                    data(:,2)==1&data(:,4)==nextTermExpiration,8),...
+                    data(ismember(data(:,3),klist2)&...
+                        data(:,2)==2&data(:,4)==nextTermExpiration,[8,11])];
                 nextTerm = [nextTerm,nextTerm(:,2)-nextTerm(:,3)];
 
                 %which [strike price to pick,difference between call/put] in step1
@@ -202,7 +209,7 @@ classdef portfolio < handle
                 putTable2 = zeroFilter(data(data(:,2)==2&data(:,3)<k2&data(:,4)==nextTermExpiration,[3,8,6]),'put');
                 callTable2 = zeroFilter(data(data(:,2)==1&data(:,3)>k2&data(:,4)==nextTermExpiration,[3,8,6]),'call');
                 table2 = [putTable2;[k2,midPrice2];callTable2];
-
+                
                 %insert columns of smoothed delta-strike (dK) price at the second column
                 table1 = [table1(:,1),smooth(table1(:,1)),table1(:,2:end)];
                 table2 = [table2(:,1),smooth(table2(:,1)),table2(:,2:end)];
