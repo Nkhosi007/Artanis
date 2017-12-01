@@ -1,8 +1,11 @@
 # Options trading strategy backtest module
 	
 _This is a backtest module disigned for options only_
+
 _Language: Matlab (yeah yeah yeah, it's not a real language, I get it)_
+
 _Author: Jerry Wong_
+
 _Aug-2016_
 	
 ## 	Basic functions and classes:
