@@ -11,22 +11,22 @@ _Aug-2016_
 ## 	Basic functions and classes:
 
 ### 	genVIX:
-* 			compute an analog of VIX for a specific stock
-* 			requires options historical data
+* compute an analog of VIX for a specific stock
+* requires options historical data
 
 ### 	portfolio (handle class)
 #### 		properties
-* 				mktInfo: current available options and info
-* 				cash: $$$$$$$
-* 				options: record of current position
-* 				order history: log of orders ever placed
-* 				activeOrders: output of the strategy
+* mktInfo: current available options and info
+* cash: $$$$$$$
+* options: record of current position
+* order history: log of orders ever placed
+* activeOrders: output of the strategy
 
 #### 		methods
-* 				genVIX(): compute the genVIX for this stock
-* 				policy(): trading strategy, output a set of orders
-* 				settleExpiredOptions(): output a set of orders to close the position of expired options
-* 				getStatus(): output the current holdings, gross & net profit and total fee since the first trading day
+* genVIX(): compute the genVIX for this stock
+* policy(): trading strategy, output a set of orders
+* settleExpiredOptions(): output a set of orders to close the position of expired options
+* getStatus(): output the current holdings, gross & net profit and total fee since the first trading day
 
 ### 	leapyear(year): boolean function, check for leapyear
 
